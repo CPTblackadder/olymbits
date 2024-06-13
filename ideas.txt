@@ -33,3 +33,44 @@ chance to win is higher if gap is small
 
 if player at back:
 chance to win 
+
+Ok so
+Top level we store each game and each game tells us which opponent inputs are most likely by ranking them for which would put them in the 
+best position after N (how ever much computation we can get away with) turns.
+Then determine which of our inputs would be best based on this. Then do that.
+
+So what do we need?
+Need to be able to detemine how good any given move might be with some heuristic.
+Need to be able to determine this for any given player.
+
+So what should a game manager do?
+What are we doing at the top level?
+- First branching we should calculate all possible commands. Since that's the important decision.
+- Ask for most likely enemy moves over N turns.
+	- To be effictient it might be good to come up with most likely moves each turn and assume that case. Or maybe the top two possibilities per opponent.
+	- We then aggregate these and come up with likely enemy moves.
+- Ask for best moves given opposing moves over the following N turns. Giving expected returns for each Command.
+	- We then aggregate this info to maximise medals
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

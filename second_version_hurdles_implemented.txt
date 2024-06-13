@@ -1,0 +1,660 @@
+use std::{io, ops::{Index, IndexMut, Add, AddAssign}, collections::{HashSet, hash_map::DefaultHasher}, hash::Hasher, iter::{FromIterator, Sum, zip}, cmp::PartialEq};
+use itertools::{izip, iproduct};
+use std::hash::Hash;
+
+macro_rules! parse_input {
+    ($x:expr, $t:ident) => ($x.trim().parse::<$t>().unwrap())
+}
+
+const COMMANDS: [Command; 4]= [Command::UP, Command::RIGHT, Command:: DOWN, Command::LEFT];
+
+/**
+ * Auto-generated code below aims at helping you parse
+ * the standard input according to the problem statement.
+ **/
+fn main() {
+    let mut input_line = String::new();
+    io::stdin().read_line(&mut input_line).unwrap();
+    let player_idx = parse_input!(input_line, i32);
+    let mut input_line = String::new();
+    io::stdin().read_line(&mut input_line).unwrap();
+    let nb_games = parse_input!(input_line, i32);
+
+    for turn in 0..100 {
+        heuristic_game_loop(player_idx, turn);
+    }
+}
+
+enum OneOrFour<T> {
+    One(T),
+    Four(CommandList<T>),
+}
+
+#[derive(PartialEq, PartialOrd, Clone, Copy)]
+struct OrderedFloat(f32);
+
+impl Eq for OrderedFloat {
+}
+
+impl Ord for OrderedFloat {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.total_cmp(&other.0)
+    }
+}
+
+fn heuristic_game_loop(player_idx: i32, turn: i32) {
+    for i in 0..3 as usize {
+        let mut input_line = String::new();
+        io::stdin().read_line(&mut input_line).unwrap();
+        // dbg!(&input_line);
+        let score_info = input_line.trim_matches('\n').to_string();
+    }
+    let games: Vec<Box<dyn GameManager>> = vec![
+        HurdleGameManager::create_from_input(player_idx),
+        UnImplementedGameManager::create_from_input(),
+        UnImplementedGameManager::create_from_input(),
+        UnImplementedGameManager::create_from_input(),
+    ];
+
+    let mut all_games = AllGamesState::new(games);
+
+    for _ in 0..4 {
+        all_games.advance_game_states();
+    }
+
+    let command = all_games.get_best_intial_move();
+    
+    println!("{}", command.to_string());
+}
+
+#[derive(Eq, PartialEq, Copy, Clone)]
+enum Command {
+    UP,
+    RIGHT,
+    DOWN,
+    LEFT,
+}
+
+impl Command {
+    fn to_string(&self) -> &str {
+        match self {
+            Command::UP => "UP",
+            Command::RIGHT => "RIGHT",
+            Command::DOWN => "DOWN",
+            Command::LEFT => "LEFT",
+        }
+    }
+
+    fn letter(&self) -> char {
+        match self {
+            Command::UP => 'U',
+            Command::RIGHT => 'R',
+            Command::DOWN => 'D',
+            Command::LEFT => 'L',
+        }
+    }
+
+    fn index(&self) -> usize {
+        match self {
+            Command::UP => 0,
+            Command::RIGHT => 1,
+            Command::DOWN => 2,
+            Command::LEFT => 3,
+        }
+    }
+
+    fn from_index(index: usize) -> Command {
+        match index {
+            0 => Command::UP,
+            1 => Command::RIGHT,
+            2 => Command::DOWN,
+            3 => Command::LEFT,
+            _ => panic!("Unexpected index")
+        }
+    }
+
+    fn hurdle_moves(&self) -> usize {
+        match self {
+            Command::UP => 2,
+            Command::RIGHT => 3,
+            Command::DOWN => 2,
+            Command::LEFT => 1,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Default)]
+struct CommandList<T>([T;4]);
+
+impl<T> CommandList<T> {
+    fn get_best_action(&self) -> Command
+        where T: Ord + Copy {
+        zip(COMMANDS, self.0).max_by_key(|x| x.1).unwrap().0
+    }
+
+    fn init(value: T) -> Self 
+    where T: Copy {
+        CommandList([value;4])
+    }
+
+    fn new(value: [T;4]) -> Self 
+    where  {
+        CommandList(value)
+    }
+
+    fn map<B, F>(&self, f: F) -> CommandList<B>
+    where F: Fn(&T) -> B {
+        CommandList([
+            f(&self[0]),
+            f(&self[1]),
+            f(&self[2]),
+            f(&self[3]),
+        ])
+    }
+
+    fn map_with_command<B, F>(&self, f: F) -> CommandList<B>
+    where F: Fn(Command, &T) -> B {
+        CommandList([
+            f(Command::UP, &self[0]),
+            f(Command::RIGHT, &self[1]),
+            f(Command::DOWN, &self[2]),
+            f(Command::LEFT, &self[3]),
+        ])
+    }
+
+    fn map_mut<F>(&mut self, f: F)
+    where F: Fn(&T) -> T {
+        for command in COMMANDS {
+            self[command] = f(&self[command])
+        }
+    }
+
+    fn map_mut_with_command<F>(&mut self, f: F)
+    where F: Fn(Command, &T) -> T {
+        for command in COMMANDS {
+            self[command] = f(command, &self[command])
+        }
+    }
+
+    fn map_mut_in_place<F>(&mut self, f: F)
+    where F: Fn(&mut T) {
+        for command in COMMANDS {
+            f(&mut self[command])
+        }
+    }
+
+    fn map_mut_in_place_with_command<F>(&mut self, f: F)
+    where F: Fn(Command, &mut T) {
+        for command in COMMANDS {
+            f(command, &mut self[command])
+        }
+    }
+
+    fn to_string(&self) -> String
+    where T: std::fmt::Display {
+        format!("UP: {}, RIGHT: {}, DOWN: {}, LEFT: {}", self[0], self[1], self[2], self[3])
+    }
+}
+
+impl CommandList<f32> {
+    fn get_best_action_f32(self: CommandList<f32>) -> Command
+    {
+        zip(COMMANDS, self.0).max_by_key(|x| OrderedFloat(x.1)).unwrap().0
+    }
+
+    fn f32_from_option_command(command: Option<Command>) -> CommandList<f32> {
+        match command {
+            Some(command) => {
+                let mut c = CommandList::init(0.);
+                c[command] = 1.;
+                c
+        },
+            None => CommandList::init(0.),
+        }
+    }
+}
+
+impl<T> Index<Command> for CommandList<T> {
+    type Output = T;
+
+    fn index(&self, index: Command) -> &Self::Output {
+        &self.0[index.index()]
+    }
+}
+
+impl<T> IndexMut<Command> for CommandList<T> {
+    fn index_mut(&mut self, index: Command) -> &mut Self::Output {
+        &mut self.0[index.index()]
+    }
+}
+
+impl<T> Index<usize> for CommandList<T> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl<T> IndexMut<usize> for CommandList<T> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.0[index]
+    }
+}
+
+
+impl<T> Sum for CommandList<T>
+where T: Default + Add<Output = T> + Clone + Copy {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        let mut count = CommandList::init(T::default());
+        for i in iter {
+            count = count + i;
+        }
+        count
+    }
+}
+
+impl<T> Add for CommandList<T>
+where T: Copy + Add<Output = T> {
+    type Output = CommandList<T>;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        let a = self;
+        let b = rhs;
+        CommandList([a[0] + b[0], a[1] + b[1], a[2] + b[2], a[3] + b[3]])
+    }
+}
+
+fn get_inputs() -> (String,i32,i32,i32,i32,i32,i32,i32) {
+    let mut input_line = String::new();
+    io::stdin().read_line(&mut input_line).unwrap();
+    // dbg!(&input_line);
+    let inputs = input_line.split(" ").collect::<Vec<_>>();
+    (inputs[0].trim().to_string(),
+    parse_input!(inputs[1], i32),
+    parse_input!(inputs[2], i32),
+    parse_input!(inputs[3], i32),
+    parse_input!(inputs[4], i32),
+    parse_input!(inputs[5], i32),
+    parse_input!(inputs[6], i32),
+    parse_input!(inputs[7], i32))
+}
+
+struct AllGamesState {
+    games: Vec<Box<dyn GameManager>>,
+    initial_turn_done: bool,
+}
+
+
+impl AllGamesState {
+    fn advance_game_states(&mut self) {
+        let overall_prediction = self.games.iter().map(|x| x.opponent_turns_prediction()).sum::<CommandList<OpponentTurnsPrediction>>();
+        let most_likely_opponent_moves = overall_prediction.map(|x| x.get_most_likely());
+        if self.initial_turn_done {
+            let best_action = self.games.iter().map(|x| x.best_moves_given_turn_prediction(most_likely_opponent_moves)).sum::<CommandList<CommandMedalChancePrediction>>();
+            for g in &mut self.games {
+                g.advance_states(most_likely_opponent_moves.map_with_command(|command,[b,c]| [best_action[command].prediction.get_best_action_f32(), *b,*c]));
+            }
+        } else {
+            for g in &mut self.games {
+                g.set_initial_state(most_likely_opponent_moves);
+            }
+            self.initial_turn_done = true;
+        }
+    }
+
+    fn new(games: Vec<Box<dyn GameManager>>) -> Self {
+        Self{games, initial_turn_done: false}
+    }
+
+    fn get_best_intial_move(&self) -> Command {
+        assert!(self.initial_turn_done);
+        self.games.iter().map(|x| x.best_initial_move()).sum::<CommandMedalChancePrediction>().prediction.get_best_action_f32()
+    }
+}
+
+#[derive(Clone, Copy, Default)]
+struct OpponentTurnsPrediction {
+    opp_1_command_likelihood: CommandList<f32>,
+    opp_2_command_likelihood: CommandList<f32>,
+}
+
+impl OpponentTurnsPrediction {
+    fn get_most_likely(&self) -> [Command;2] {
+        [self.opp_1_command_likelihood.get_best_action_f32(), self.opp_2_command_likelihood.get_best_action_f32()]
+    }
+}
+
+impl Sum for OpponentTurnsPrediction {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        let mut opp_1_command_likelihood = CommandList::init(0.);
+        let mut opp_2_command_likelihood = CommandList::init(0.);
+        for otp in iter {
+            opp_1_command_likelihood = opp_1_command_likelihood + otp.opp_1_command_likelihood;
+            opp_2_command_likelihood = opp_1_command_likelihood + otp.opp_2_command_likelihood;
+        }
+        Self {
+            opp_1_command_likelihood,
+            opp_2_command_likelihood,
+        }
+    }
+}
+
+impl Add for OpponentTurnsPrediction {
+    type Output = OpponentTurnsPrediction;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self{ 
+            opp_1_command_likelihood: self.opp_1_command_likelihood + rhs.opp_1_command_likelihood, 
+            opp_2_command_likelihood: self.opp_2_command_likelihood + rhs.opp_2_command_likelihood 
+        }
+    }
+}
+
+#[derive(Clone, Copy, Default)]
+struct CommandMedalChancePrediction {
+    prediction: CommandList<f32>,
+}
+impl CommandMedalChancePrediction {
+    fn new(prediction: CommandList<f32>) -> Self {
+        Self{prediction}
+    }
+}
+
+impl Sum for CommandMedalChancePrediction {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        let mut prediction = CommandList::init(0.);
+        for otp in iter {
+            prediction = prediction + otp.prediction;
+        }
+        Self {
+            prediction,
+        }
+    }
+}
+
+impl Add for CommandMedalChancePrediction {
+    type Output=CommandMedalChancePrediction;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self{ prediction: self.prediction + rhs.prediction }
+    }
+}
+
+
+
+trait GameManager {
+    fn opponent_turns_prediction(&self) -> CommandList<OpponentTurnsPrediction>;
+    fn best_moves_given_turn_prediction(&self, turn_prediction: CommandList<[Command;2]>) -> CommandList<CommandMedalChancePrediction>;
+    fn set_initial_state(&mut self, opponent_turns: CommandList<[Command;2]>);
+    fn advance_states(&mut self, commands: CommandList<[Command;3]>);
+    fn best_initial_move(&self) -> CommandMedalChancePrediction;
+}
+
+struct UnImplementedGameManager {}
+
+impl GameManager for UnImplementedGameManager {
+    fn opponent_turns_prediction(&self) -> CommandList<OpponentTurnsPrediction> {
+        CommandList::init(OpponentTurnsPrediction{ opp_1_command_likelihood: CommandList::init(0.), opp_2_command_likelihood: CommandList::init(0.)})
+    }
+    fn best_moves_given_turn_prediction(&self, turn_prediction: CommandList<[Command;2]>) -> CommandList<CommandMedalChancePrediction> {
+        CommandList::init(CommandMedalChancePrediction { prediction: CommandList::init(0.) })
+    }
+    fn best_initial_move(&self) -> CommandMedalChancePrediction {
+        CommandMedalChancePrediction { prediction: CommandList::init(0.) }
+    }
+    fn set_initial_state(&mut self, opponent_turns: CommandList<[Command;2]>) {}
+    fn advance_states(&mut self, commands: CommandList<[Command;3]>) {}
+}
+
+impl UnImplementedGameManager {
+    fn create_from_input() -> Box<Self> {
+        get_inputs();
+        Box::new( Self {} )
+    }
+}
+
+enum HurdleGameManager {
+    Running(String, OneOrFour<HurdleGameState>),
+    GameOver(),
+}
+
+impl GameManager for HurdleGameManager {
+    fn opponent_turns_prediction(&self) -> CommandList<OpponentTurnsPrediction> {
+        match self {
+            HurdleGameManager::Running(track, states) =>         
+            match states {
+                OneOrFour::One(state) => CommandList::init(state.get_opponent_predictions(track)),
+                OneOrFour::Four(states) => states.map(|x| x.get_opponent_predictions(track)),
+            },
+            HurdleGameManager::GameOver() => CommandList::default(),
+        }
+    }
+
+    fn best_moves_given_turn_prediction(&self, _turn_prediction: CommandList<[Command;2]>) -> CommandList<CommandMedalChancePrediction> {
+        match self {
+            HurdleGameManager::Running(track, states) =>         match states {
+                OneOrFour::One(state) => CommandList::init(state.get_best_current_move(track)),
+                OneOrFour::Four(states) => states.map(|x| x.get_best_current_move(track)),
+            },
+            HurdleGameManager::GameOver() => CommandList::default(),
+        }
+    }
+
+    fn set_initial_state(&mut self, opponent_turns: CommandList<[Command;2]>) {
+        match self {
+            HurdleGameManager::Running(track, states) => {
+                let new_states = match states {
+                    OneOrFour::One(state) => opponent_turns.map_with_command(
+                        |command, [b,c]| {
+                            let mut s = state.clone();
+                            s.apply([command, *b, *c], track);
+                            s
+                        }
+                    ),
+                    OneOrFour::Four(_) => panic!("Must set initial state first"),
+                };
+                *states = OneOrFour::Four(new_states);
+            },
+            HurdleGameManager::GameOver() => (),
+        }
+    }
+
+    fn advance_states(&mut self, commands: CommandList<[Command;3]>) {
+        match self {
+            HurdleGameManager::Running(track, states) =>         match states {
+                OneOrFour::One(_) => panic!("Can't be done until initial state set"),
+                OneOrFour::Four(mut states) => states.map_mut_in_place_with_command(|command, x| x.apply(commands[command], track)),
+            },
+            HurdleGameManager::GameOver() => (),
+        }
+    }
+
+    fn best_initial_move(&self) -> CommandMedalChancePrediction {
+        match self {
+            HurdleGameManager::Running(track, states) => match states {
+                OneOrFour::One(_) => panic!("Must compute once to get a prediction of good outcomes"),
+                OneOrFour::Four(states) => {
+                    let prediction = states.map(|x| x.get_medal_chance_prediction(track));
+                    dbg!(prediction.to_string());
+                    CommandMedalChancePrediction::new(prediction)
+                },
+            },
+            HurdleGameManager::GameOver() => CommandMedalChancePrediction::default(),
+        }
+    }
+}
+
+impl HurdleGameManager {
+    fn create_from_input(player_idx: i32) -> Box<Self> {
+        let (track, reg_0, reg_1,reg_2,reg_3,reg_4,reg_5,reg_6) = get_inputs();
+        if track == "GAME_OVER" {
+            Box::new(Self::GameOver())
+        } else {
+            let (player, opp_1, opp_2) = match player_idx {
+                0 => (HurdlePlayerState::new(reg_0,reg_3),HurdlePlayerState::new(reg_1,reg_4),HurdlePlayerState::new(reg_2,reg_5)),
+                1 => (HurdlePlayerState::new(reg_1,reg_4),HurdlePlayerState::new(reg_0,reg_3),HurdlePlayerState::new(reg_2,reg_5)),
+                2 => (HurdlePlayerState::new(reg_2,reg_5),HurdlePlayerState::new(reg_0,reg_3),HurdlePlayerState::new(reg_1,reg_4)),
+                _ => panic!("Unexpected player_idx"),
+            };
+            Box::new(Self::Running(track, OneOrFour::One(HurdleGameState{ player, opp_1, opp_2, finished: false })))
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct HurdleGameState {
+    player: HurdlePlayerState,
+    opp_1: HurdlePlayerState,
+    opp_2: HurdlePlayerState,
+    finished: bool,
+}
+
+impl HurdleGameState {
+    fn get_opponent_predictions(&self, track: &str) -> OpponentTurnsPrediction {
+        if self.finished {
+            OpponentTurnsPrediction {
+                opp_1_command_likelihood: CommandList::init(0.), 
+                opp_2_command_likelihood: CommandList::init(0.) 
+            }
+        } else {
+            OpponentTurnsPrediction {
+                opp_1_command_likelihood: CommandList::f32_from_option_command(self.opp_1.best_move(track)), 
+                opp_2_command_likelihood: CommandList::f32_from_option_command(self.opp_2.best_move(track)) 
+            }
+        }
+    }
+
+    fn get_best_current_move(&self, track: &str) -> CommandMedalChancePrediction {
+        if self.finished {
+            CommandMedalChancePrediction {
+                prediction: CommandList::init(0.)
+            }
+        } else {
+            CommandMedalChancePrediction {
+                prediction: CommandList::f32_from_option_command(self.player.best_move(track))
+            }
+        }
+    }
+
+    fn apply(&mut self, commands: [Command;3], track: &str) {
+        if self.finished {
+            return;
+        }
+        let finish_pos = [self.player,self.opp_1,self.opp_2].iter().filter(|x| x.has_finished()).count() as i32;
+        self.player.apply(commands[0], track, finish_pos);
+        self.opp_1.apply(commands[1], track, finish_pos);
+        self.opp_2.apply(commands[2], track, finish_pos);
+        if [self.player,self.opp_1,self.opp_2].iter().filter(|x| x.has_finished()).count() >= 2 {
+            self.finished = true;
+        }
+    }
+
+    fn get_medal_chance_prediction(&self, track: &str) -> f32 {
+        match self.player {
+            HurdlePlayerState::Running(pos, stun_timer) => {
+                let pos = pos - (stun_timer * 2);
+                let max = if self.opp_1.has_finished() || self.opp_2.has_finished() {
+                    1.
+                } else {
+                    3.
+                };
+                let (first, last) = if self.opp_1.get_distance(track) > self.opp_2.get_distance(track) {
+                    (self.opp_1, self.opp_2)
+                } else {
+                    (self.opp_2, self.opp_1)
+                };
+                let max_distance = 20;
+                // from 0 to 1, 0.5 is player is at exact same position up to 10 places either side
+                let modifier = if pos < last.get_distance(track) {
+                    pos - last.get_distance(track)
+                } else {
+                    pos - first.get_distance(track)
+                }.min(max_distance).max(-max_distance) as f32 / (max_distance as f32);
+                max * modifier
+            },
+            HurdlePlayerState::Finished(value) => if value == 0 {
+                return 3.
+            } else if value == 1 {
+                return 1.
+            } else {
+                return 0.
+            },
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum HurdlePlayerState {
+    Running(i32,i32),
+    Finished(i32),
+}
+
+impl HurdlePlayerState {
+    fn new(position: i32, stun_timer: i32) -> Self { Self::Running(position, stun_timer) }
+
+    fn best_move(&self, track: &str) -> Option<Command> {
+        match self {
+            HurdlePlayerState::Running(position, stun_timer) => {
+                if *stun_timer > 0 { return None }
+                for (i,c) in track[1 + *position as usize..].chars().take(3).enumerate() {
+                    if c == '#' {
+                        if i == 0 {
+                            return Some(Command::UP);
+                        } else if i == 1 {
+                            return Some(Command::LEFT);
+                        } else if i == 2 {
+                            return Some(Command::DOWN);
+                        }
+                    }
+                }
+                Some(Command::RIGHT)
+            }
+            HurdlePlayerState::Finished(_) => return None,
+        }
+    }
+
+    fn apply(&mut self, command: Command, track: &str, finish_pos: i32) {
+        // Check if we jump over hurdle
+        match self {
+            HurdlePlayerState::Running(position, stun_timer) => 
+            {
+                if *stun_timer > 0 {
+                    *stun_timer -= 1;
+                } else {
+                    let moves = command.hurdle_moves();
+                    let start_pos = 1 + *position as usize;
+                    for (i,c) in track[start_pos..].chars().take(moves).enumerate() {
+                        if c == '#' {
+                            if command != Command::UP || i != 0 {
+                                *stun_timer = 3;
+                                *position = (start_pos + i) as i32;
+                            }
+                        }
+                    }
+                    let new_pos = start_pos + moves - 1;
+                    if new_pos >= track.len() {
+                        *self = HurdlePlayerState::Finished(finish_pos);
+                    } else {
+                        *position = new_pos as i32;
+                    }
+                }
+            },
+            HurdlePlayerState::Finished(_) => (),
+        }
+    }
+
+    fn has_finished(&self) -> bool {
+        match self {
+            HurdlePlayerState::Running(_, _) => false,
+            HurdlePlayerState::Finished(_) => true,
+        }
+    }
+
+    fn get_distance(&self, track: &str) -> i32 {
+        match self {
+            HurdlePlayerState::Running(pos, stun_timer) => pos - (stun_timer * 2),
+            HurdlePlayerState::Finished(_) => return track.len() as i32,
+        }
+    }
+}

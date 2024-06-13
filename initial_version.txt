@@ -1,0 +1,577 @@
+use std::{io, ops::Index, collections::{HashSet, hash_map::DefaultHasher}, hash::Hasher, iter::FromIterator, cmp::PartialEq};
+use itertools::{izip, iproduct};
+use std::hash::Hash;
+
+macro_rules! parse_input {
+    ($x:expr, $t:ident) => ($x.trim().parse::<$t>().unwrap())
+}
+
+const COMMANDS: [Command; 4]= [Command::UP, Command::RIGHT, Command:: DOWN, Command::LEFT];
+
+/**
+ * Auto-generated code below aims at helping you parse
+ * the standard input according to the problem statement.
+ **/
+fn main() {
+    let mut input_line = String::new();
+    io::stdin().read_line(&mut input_line).unwrap();
+    let player_idx = parse_input!(input_line, i32);
+    let mut input_line = String::new();
+    io::stdin().read_line(&mut input_line).unwrap();
+    let nb_games = parse_input!(input_line, i32);
+
+    for turn in 0..100 {
+        heuristic_game_loop(player_idx, turn);
+    }
+}
+
+fn calculated_game_loop(player_idx: i32, turn: i32) {
+    let mut game_commands: Vec<CommandScore> = Vec::with_capacity(4);
+    for i in 0..3 as usize {
+        let mut input_line = String::new();
+        io::stdin().read_line(&mut input_line).unwrap();
+        // dbg!(&input_line);
+        let score_info = input_line.trim_matches('\n').to_string();
+    }
+    game_commands.push(do_hurdle_game(player_idx));
+    game_commands.push(do_archery_game(player_idx, turn));
+    game_commands.push(do_roller_speed_game(player_idx));
+    game_commands.push(do_diving_game(player_idx));
+
+    //.max_by(|x, y| x.abs().partial_cmp(&y.abs()).unwrap())
+    let command = COMMANDS.iter().max_by( |command1, command2|
+        game_commands.iter().map(
+        |x| x[**command1]).sum::<f32>().partial_cmp(
+            &game_commands.iter().map(
+            |x| x[**command2]).sum::<f32>()).unwrap_or(std::cmp::Ordering::Equal)).unwrap();
+
+    println!("{}", command.to_string());
+
+}
+
+#[derive(PartialEq, PartialOrd)]
+struct OrderedFloat(f32);
+
+impl Eq for OrderedFloat {
+}
+
+impl Ord for OrderedFloat {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.total_cmp(&other.0)
+    }
+}
+
+
+fn heuristic_game_loop(player_idx: i32, turn: i32) {
+    for i in 0..3 as usize {
+        let mut input_line = String::new();
+        io::stdin().read_line(&mut input_line).unwrap();
+        // dbg!(&input_line);
+        let score_info = input_line.trim_matches('\n').to_string();
+    }
+    let games: Vec<Box<dyn GameState>> = vec![
+        HurdleGameState::create_from_input(player_idx),
+        UnImplementedGame::create_from_input(),
+        UnImplementedGame::create_from_input(),
+        UnImplementedGame::create_from_input(),
+    ];
+    let games_states: GamesState = GamesState{ 
+        games: HashSet::from_iter(games.into_iter())};
+
+    let commands = 
+        iproduct!(COMMANDS, COMMANDS, COMMANDS, COMMANDS).max_by_key(
+            |c| {
+                let new_states: GamesState =  games_states.apply_command(c.0)
+                .apply_command(c.1).apply_command(c.2).apply_command(c.3);
+                let (a,b) = new_states.heurtistic_to_win();
+                drop(new_states);
+                OrderedFloat(a * 3. + b)
+            }
+            ).unwrap();
+    
+    println!("{}", commands.0.to_string());
+}
+
+#[derive(Eq, PartialEq, Copy, Clone)]
+enum Command {
+    UP,
+    RIGHT,
+    DOWN,
+    LEFT,
+}
+
+impl Command {
+    fn to_string(&self) -> &str {
+        match self {
+            Command::UP => "UP",
+            Command::RIGHT => "RIGHT",
+            Command::DOWN => "DOWN",
+            Command::LEFT => "LEFT",
+        }
+    }
+
+    fn letter(&self) -> char {
+        match self {
+            Command::UP => 'U',
+            Command::RIGHT => 'R',
+            Command::DOWN => 'D',
+            Command::LEFT => 'L',
+        }
+    }
+}
+
+struct CommandScore
+{
+    scores: [f32; 4],
+}
+impl CommandScore {
+    fn zero() -> CommandScore {
+        CommandScore{ scores: [0.,0.,0.,0.] }
+    }
+}
+
+impl Index<Command> for CommandScore {
+    type Output = f32;
+
+    fn index(&self, index: Command) -> &Self::Output {
+        match index {
+            Command::UP => &self.scores[0],
+            Command::RIGHT => &self.scores[1],
+            Command::DOWN => &self.scores[2],
+            Command::LEFT => &self.scores[3],
+        }
+    }
+}
+
+fn get_inputs() -> (String,i32,i32,i32,i32,i32,i32,i32) {
+    let mut input_line = String::new();
+    io::stdin().read_line(&mut input_line).unwrap();
+    // dbg!(&input_line);
+    let inputs = input_line.split(" ").collect::<Vec<_>>();
+    (inputs[0].trim().to_string(),
+    parse_input!(inputs[1], i32),
+    parse_input!(inputs[2], i32),
+    parse_input!(inputs[3], i32),
+    parse_input!(inputs[4], i32),
+    parse_input!(inputs[5], i32),
+    parse_input!(inputs[6], i32),
+    parse_input!(inputs[7], i32))
+}
+
+pub struct GamesState<'a> {
+    games: HashSet<Box<dyn GameState<'a>>>,
+}
+
+impl<'a> GamesState<'a> {
+    fn apply_command<'b> (&self, command: Command) -> GamesState<'b>
+    {
+        GamesState::<'b>{ games: HashSet::from_iter(self.games.iter().map(|game| game.advance_only_player::<'b>(command)).flatten())}
+    }
+
+    fn heurtistic_to_win(&self) -> (f32,f32) {
+        let (a,b) = self.games.iter().fold((0.,0.), |a, game| add_two_tuples(a,game.heuristic_to_win()));
+        (a / self.games.len() as f32, b / self.games.len() as f32)
+    }
+}
+
+fn add_two_tuples<T: std::ops::Add<Output = T>>((a,b): (T,T), (c,d): (T,T)) -> (T,T) {
+    (a+c,b+d)
+}
+
+trait GameState<'a> {
+	fn heuristic_to_win(&self) -> (f32,f32);
+	
+	fn advance<'b>(&self, player_command: Command, opp_1_command: Command, opp_2_command: Command) -> Box<dyn GameState<'b>>;
+
+    fn advance_only_player<'b>(&self, played_command: Command) -> Vec<Box<dyn GameState<'b>>>;
+
+    fn state_hash(&self) -> u64;
+    fn equality_id(&'a self) -> EqualityEnum<'a>;
+}
+
+#[derive(Eq,PartialEq,Hash)]
+enum EqualityEnum<'a> {
+    NotImplemented,
+    Hurdle(&'a HurdleGameState),
+}
+
+impl<'a> EqualityEnum<'a> {
+    fn bool(&'a self) -> bool {
+        true
+    }
+}
+
+impl<'a> Hash for Box<dyn GameState<'a>> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        state.write_u64(self.state_hash());
+    }
+}
+
+impl<'a> Eq for Box<dyn GameState<'a>+ 'a> {
+    
+}
+
+
+impl<'a, 'b> PartialEq<Box<dyn GameState<'b> + 'b>> for Box<dyn GameState<'a> + 'a> {
+    fn eq(&self, other: &Box<dyn GameState<'b> + 'b>) -> bool {
+        self.equality_id() == other.equality_id()
+    }
+}
+
+
+#[derive(Hash)]
+struct UnImplementedGame {
+}
+
+impl UnImplementedGame {
+    fn create_from_input() -> Box<Self>  {
+        get_inputs();
+        Box::new(Self {})
+    }
+}
+
+impl<'a> GameState<'a> for UnImplementedGame {
+    fn heuristic_to_win(&self) -> (f32,f32) {
+        (0.0, 0.0)
+    }
+
+    fn advance<'b>(&self, player_command: Command, opp_1_command: Command, opp_2_command: Command) -> Box<dyn GameState<'b>> {
+        Box::new(Self {})
+    }
+
+    fn advance_only_player<'b>(&self, played_command: Command) -> Vec<Box<dyn GameState<'b>>> {
+        vec![Box::new(Self {})]
+    }
+
+    fn state_hash(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        Hash::hash(&self, &mut hasher);
+        hasher.finish()
+    }
+
+    fn equality_id(&'a self) -> EqualityEnum<'a> {
+        EqualityEnum::NotImplemented
+    }
+}
+
+#[derive(Hash, Eq, PartialEq)]
+enum HurdleGameState {
+    Running(RunningHurdleGameState),
+    Finished(i32),
+}
+
+#[derive(Hash, PartialEq, Eq)]
+struct RunningHurdleGameState {
+    track: String,
+    player_pos: i32,
+    opp_1_pos: i32,
+    opp_2_pos: i32,
+    player_stun: i32,
+    opp_1_stun: i32,
+    opp_2_stun: i32,
+}
+
+impl HurdleGameState {
+    fn create_from_input(player_idx: i32) -> Box<Self>  {
+        let (gpu, reg_0, reg_1,reg_2,reg_3,reg_4,reg_5,reg_6) = get_inputs(); 
+
+        let player_pos;
+        let opp_1_pos;
+        let opp_2_pos;
+        let player_stun;
+        let opp_1_stun;
+        let opp_2_stun;
+        match player_idx {
+            0 => {
+                player_pos = reg_0;
+                opp_1_pos = reg_1;
+                opp_2_pos = reg_2;
+                player_stun = reg_3;
+                opp_1_stun = reg_4;
+                opp_2_stun = reg_5;
+            },
+            1 => {
+                player_pos = reg_1;
+                opp_1_pos = reg_0;
+                opp_2_pos = reg_2;
+                player_stun = reg_4;
+                opp_1_stun = reg_3;
+                opp_2_stun = reg_5;
+            },
+            2 => {
+                player_pos = reg_2;
+                opp_1_pos = reg_1;
+                opp_2_pos = reg_0;
+                player_stun = reg_5;
+                opp_1_stun = reg_4;
+                opp_2_stun = reg_3;
+            },
+            _ => panic!("Unexpected player_idx")
+        }
+
+        Box::new(Self::Running(RunningHurdleGameState{track: gpu, player_pos, opp_1_pos, opp_2_pos, player_stun, opp_1_stun, opp_2_stun }))
+    }
+}
+
+impl<'a> GameState<'a> for HurdleGameState {
+    fn heuristic_to_win(&self) -> (f32,f32) {
+        let state;
+        match self {
+            HurdleGameState::Running(s) => state = s,
+            HurdleGameState::Finished(own_pos) => return {
+                if *own_pos == 0 { 
+                    (1.,0.)
+                } else if *own_pos == 1 {
+                    (0.,1.)
+                } else {
+                    (0.,0.)
+                }
+            },
+        }
+        if state.track == "GAME_OVER" {
+            return (0.,0.)
+        }
+        fn chance_calculator(spaces_behind: i32) -> f32{
+            // 50% when neck and neck, down to 0% when more than 5 steps behind
+            0.5 - (0.1 * spaces_behind.min(5) as f32)
+        }
+        // treat stun as being two back per stum timer
+        let player_pos = state.player_pos - state.player_stun * 2;
+        let opp_1_pos = state.opp_1_pos - state.opp_1_stun * 2;
+        let opp_2_pos = state.opp_2_pos - state.opp_2_stun * 2;
+
+        let mut opps = [opp_1_pos, opp_2_pos];
+        opps.sort();
+        let [furthest_opp, behindest_opp] = opps;
+        let distance_from_furthest = if furthest_opp == state.track.len() as i32 {
+            5
+        } else {
+            (furthest_opp - player_pos).max(-5).min(5)
+        };
+        let distance_from_behindest = (behindest_opp - player_pos).max(-5).min(5);
+
+        if distance_from_furthest + distance_from_behindest >= 10 {
+            let chance_to_win = chance_calculator(distance_from_furthest);
+            (chance_to_win, 1. - chance_to_win)
+        } else {
+            (chance_calculator(distance_from_furthest),
+            chance_calculator(distance_from_behindest))
+        }
+    }
+
+    fn advance<'b>(&self, player_command: Command, opp_1_command: Command, opp_2_command: Command) -> Box<dyn GameState<'b>> {
+        match self {
+            HurdleGameState::Running(state) => {
+                let track_len = state.track.len() as i32;
+                fn new_state(pos: i32, stun_timer: i32, command: Command, track: &str) -> (i32,i32) {
+                    if stun_timer > 0 {
+                        (pos, stun_timer -1)
+                    } else {
+                        add_two_tuples(SpacesToNextHurdle::from_position(pos, track).moved_and_stunned(command),(pos,0))
+                    }
+                }
+
+                let (player_pos, player_stun) = new_state(state.player_pos, state.player_stun, player_command, &state.track);
+                let (opp_1_pos, opp_1_stun) = new_state(state.opp_1_pos, state.opp_1_stun, opp_1_command, &state.track);
+                let (opp_2_pos, opp_2_stun) = new_state(state.opp_2_pos, state.opp_2_stun, opp_2_command, &state.track);
+                
+                if player_pos >=  track_len{
+                    if state.opp_1_pos >= track_len || state.opp_2_pos >= track_len {
+                        Box::new(Self::Finished(1))
+                    } else {
+                        Box::new(Self::Finished(0))
+                    }
+                } else {
+                    if opp_1_pos >= track_len && opp_2_pos >= track_len {
+                        Box::new(Self::Finished(2))
+                    } else {
+                        Box::new(Self::Running(RunningHurdleGameState{ track: state.track.clone(), player_pos, opp_1_pos, opp_2_pos, player_stun, opp_1_stun, opp_2_stun }))
+                    }
+                }
+            },
+            HurdleGameState::Finished(pos) => Box::new(Self::Finished(*pos)),
+        }
+    }
+
+    fn advance_only_player<'b>(&self, player_command: Command) -> Vec<Box<dyn GameState<'b>>> {
+        iproduct!(COMMANDS.iter(), COMMANDS.iter()).map(|(x,y)| self.advance::<'b>(player_command, *x,* y)).collect()
+    }
+
+    fn state_hash(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        Hash::hash(&self, &mut hasher);
+        hasher.finish()
+    }
+
+    fn equality_id(&'a self) -> EqualityEnum<'a> {
+        EqualityEnum::Hurdle(self)
+    }
+}
+
+
+fn do_hurdle_game(player_idx: i32) -> CommandScore {
+    let (gpu, reg_0, reg_1,reg_2,reg_3,reg_4,reg_5,reg_6) = get_inputs(); 
+
+    if gpu == "GAME_OVER" {
+        return CommandScore::zero();
+    }
+
+    let (own_position, furthest_opp) = match player_idx {
+        0 => (reg_0, reg_1.max(reg_2)),
+        1 => (reg_1, reg_0.max(reg_2)),
+        2 => (reg_2, reg_0.max(reg_1)),
+        _ => panic!("Unexpected player_idx"),
+    };
+
+    let modifier = 1. - ((furthest_opp - own_position).max(0) as f32 / gpu.len() as f32);
+    
+    let scores = SpacesToNextHurdle::from_position(own_position, &gpu).get_commmand_scores().map( |x| x * modifier);
+    CommandScore { scores }
+}
+
+fn do_archery_game(player_idx: i32, turn: i32) -> CommandScore {
+    let (gpu, reg_0, reg_1,reg_2,reg_3,reg_4,reg_5,reg_6) = get_inputs(); 
+
+    if gpu == "GAME_OVER" {
+        return CommandScore::zero();
+    }
+
+    let turn_in_game = turn as usize % 10;
+    let modifier = turn_in_game as f32 / 10.;
+
+    let (x,y) = match player_idx {
+        0 => (reg_0,reg_1),
+        1 => (reg_2,reg_3),
+        2 => (reg_4,reg_5),
+        _ => panic!("Unexpected player_idx"),
+    };
+
+    let wind_strength = parse_input!(gpu.chars().next().unwrap().to_string(),i32);
+
+    let scores = [
+        (x, y + wind_strength),
+        (x + wind_strength, y),
+        (x, y - wind_strength),
+        (x - wind_strength, y),
+    ].map(|(x,y)|  (1. - ((x * x + y * y).abs().max(100) as f32 / 50.))  * modifier);
+    CommandScore{scores}
+}
+
+fn do_roller_speed_game(player_idx: i32) -> CommandScore {
+    let (gpu, reg_0, reg_1,reg_2,reg_3,reg_4,reg_5,reg_6) = get_inputs(); 
+
+    if gpu == "GAME_OVER" {
+        return CommandScore::zero();
+    }
+
+    let (own_pos, own_risk, furthest_pos) = match player_idx {
+        0 => (reg_0, reg_3, reg_1.max(reg_2)),
+        1 => (reg_1, reg_4, reg_0.max(reg_2)),
+        2 => (reg_2, reg_5, reg_0.max(reg_1)),
+        _ => panic!("Unexpected player_idx"),
+    };
+
+    if own_risk < 0 {
+        return CommandScore::zero();
+    }
+
+    let modifier = 0.25 * ((furthest_pos + 1) as f32/(own_pos + 1) as f32);
+
+    let scores = COMMANDS.map(|x| 1. - (gpu.find(|c| c == x.letter()).unwrap() as f32 / 3.)).map(|x| x * modifier);
+    CommandScore{ scores }
+}
+
+fn do_diving_game(player_idx: i32) -> CommandScore {
+    let (gpu, reg_0, reg_1,reg_2,reg_3,reg_4,reg_5,reg_6) = get_inputs(); 
+    CommandScore::zero()
+}
+
+
+
+#[derive(PartialEq, Eq)]
+enum SpacesToNextHurdle {
+    One,
+    Two,
+    Three,
+    MoreThanThree,
+}
+
+impl SpacesToNextHurdle {
+    pub fn from_position(position: i32, track: &str) -> Self {
+        for (i,c) in track.chars().skip(1 + position as usize).take(3).enumerate() {
+            if c == '#' {
+                if i == 0 {
+                    return Self::One;
+                } else if i == 1 {
+                    return Self::Two;
+                } else if i == 2 {
+                    return Self::Three;
+                }
+            }
+        }
+        Self::MoreThanThree
+    }
+
+    fn get_commmand_scores(&self) -> [f32;4] {
+        COMMANDS.map(|x| self.score_on_command(x)/3.)
+    }
+
+    fn score_on_command(&self, command: Command) -> f32 {
+        match self {
+            SpacesToNextHurdle::One => match command {
+                Command::UP => 2.,
+                Command::RIGHT => -3.,
+                Command::DOWN => -3.,
+                Command::LEFT => -3.,
+            },
+            SpacesToNextHurdle::Two => match command {
+                Command::UP => -2.,
+                Command::RIGHT => -2.,
+                Command::DOWN => -2.,
+                Command::LEFT => 1.,
+            },
+            SpacesToNextHurdle::Three => match command {
+                Command::UP => 2.,
+                Command::RIGHT => -1.,
+                Command::DOWN => 2.,
+                Command::LEFT => 1.,
+            },
+            SpacesToNextHurdle::MoreThanThree => match command {
+                Command::UP => 2.,
+                Command::RIGHT => 3.,
+                Command::DOWN => 2.,
+                Command::LEFT => 1.,
+            },
+        }
+    }
+
+    fn moved_and_stunned(&self, command: Command) -> (i32, i32) {
+        match self {
+            SpacesToNextHurdle::One => match command {
+                Command::UP => (2, 0),
+                Command::RIGHT => (1,3),
+                Command::DOWN => (1,3),
+                Command::LEFT => (1,3),
+            },
+            SpacesToNextHurdle::Two => match command {
+                Command::UP => (2, 3),
+                Command::RIGHT => (2,3),
+                Command::DOWN => (2,3),
+                Command::LEFT => (1,0),
+            },
+            SpacesToNextHurdle::Three => match command {
+                Command::UP => (2, 0),
+                Command::RIGHT => (3,3),
+                Command::DOWN => (2,0),
+                Command::LEFT => (1,0),
+            },
+            SpacesToNextHurdle::MoreThanThree => match command {
+                Command::UP => (2, 0),
+                Command::RIGHT => (3,0),
+                Command::DOWN => (2,0),
+                Command::LEFT => (1,0),
+            },
+        }
+    }
+}
+

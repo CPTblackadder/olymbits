@@ -1,0 +1,35 @@
+
+
+
+
+CodeInGame Summer Challange
+
+
+Calculate heuristic to win, and chance to get second place from any position
+
+
+
+Try all commands for 3 steps, assume equal chance of each command from opponents in weighting
+, to see which would be best positioned to win differeing races
+
+
+
+trait GameState {
+	create_from_input()
+	
+	
+	heuristic_to_win() -> (f32,f32)
+	
+	advance(player_command, opp_1_command, opp_2_command)
+}
+
+
+Hurdle Game heuristic
+if played in lead:
+chance to win is high if closest opponent far back 
+
+if played in between:
+chance to win is higher if gap is small
+
+if player at back:
+chance to win 
